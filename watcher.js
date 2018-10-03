@@ -4,33 +4,57 @@ const http = require('http');
 const path = require('path');
 const cache = {};
 
+function sendRequest(options, body) {
+  const req = http.request(options, (res) => {
+    let data = '';
+
+    res.setEncoding('utf8');
+    res.on('data', (chunk) => { data += chunk; });
+    res.on('end', () => {
+      if (data) {
+        try {
+          const json = JSON.parse(data);
+          console.log(json);
+        } catch (e) {
+          console.error(`problem with parse response body: ${e.message}`);
+        }
+      }
+    });
+  });
+
+  req.on('error', (e) => { console.error(`problem with request: ${e.message}`); });
+
+  req.write(JSON.stringify(body));
+  req.end();
+}
+
 function send(params) {
-  const username = params.apiAccountName;
-  const password = params.apiAccountPassword;
   const filePath = params.filePath;
   const options = {
     hostname: params.apiServerName,
     port: params.apiServerPort,
     path: params.apiResourcePath,
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: Buffer.from(`${username}:${password}`).toString('base64'),
-    },
+    auth: `${params.apiUsername}:${params.apiPassword}`,
+    headers: { 'Content-Type': 'application/json' },
   };
   const body = {
-    Name: params.libName,
-    Package: params.libPackage,
-    Script: params.libContent,
+    ScriptLibrary: {
+      Name: params.libName,
+      Package: params.libPackage,
+      Script: params.libContent,
+    },
   };
   let hash;
 
   switch (params.event) {
     case 'create':
+      break;
     case 'update':
       hash = crypto.createHash('md5').update(params.libContent).digest('hex');
 
       if (cache[filePath] !== hash) {
+        options.path = `${options.path}/${params.libName}`;
         cache[filePath] = hash;
       }
       break;
@@ -40,27 +64,6 @@ function send(params) {
     default:
       break;
   }
-
-  /*
-  const req = http.request(options, (res) => {
-    console.log(`STATUS: ${res.statusCode}`);
-    console.log(`HEADERS: ${JSON.stringify(res.headers)}`);
-    res.setEncoding('utf8');
-    res.on('data', (chunk) => {
-      console.log(`BODY: ${chunk}`);
-    });
-    res.on('end', () => {
-      console.log('No more data in response.');
-    });
-  });
-
-  req.on('error', (e) => {
-    console.error(`problem with request: ${e.message}`);
-  });
-
-  req.write(postData);
-  req.end();
-  */
 }
 
 function getConfig() {
@@ -69,9 +72,9 @@ function getConfig() {
     srcPath: path.join(__dirname, 'src'),
     apiServerName: 'localhost',
     apiServerPort: 13080,
-    apiResourcePath: 'SM/9/rest/ScriptLibrary',
-    apiAccountName: 'falcon',
-    apiAccountPassword: '',
+    apiResourcePath: '/SM/9/rest/ScriptLibrary',
+    apiUsername: 'falcon',
+    apiPassword: '',
     libPackage: 'Custom',
     validExtensions: ['.js'],
   };
@@ -112,7 +115,7 @@ function main() {
             params.event = 'update';
             fs.readFile(filePath, (readErr, data) => {
               if (readErr) { throw readErr; }
-              params.content = data.toString('utf8');
+              params.libContent = data.toString('utf8');
               send(params);
             });
           }
@@ -121,5 +124,48 @@ function main() {
     }
   });
 }
+
+// main();
+
+function test() {
+  const options = {
+    hostname: 'localhost',
+    port: 13080,
+    path: '/SM/9/rest/ScriptLibrary',
+    auth: 'falcon:',
+    method: 'POST',
+  };
+  const body = {
+    ScriptLibrary: {
+      Name: 'evdokimoff',
+      Package: 'User',
+      Script: '',
+    },
+  };
+  const req = http.request(options, (res) => {
+    let data = '';
+
+    res.setEncoding('utf8');
+    res.on('data', (chunk) => { data += chunk; });
+    res.on('end', () => {
+      console.log('data=' + data);
+      if (data) {
+        try {
+          const json = JSON.parse(data);
+          console.log(json);
+        } catch (e) {
+          console.error(`problem with parse response body: ${e.message}`);
+        }
+      }
+    });
+  });
+
+  req.on('error', (e) => { console.error(`problem with request: ${e.message}`); });
+
+  req.write(JSON.stringify(body));
+  req.end();
+}
+
+/// test();
 
 main();
